@@ -225,7 +225,7 @@ build_zlib() {
   [ -f "${stamp}" ] && return
   local archive="${SRC_DIR}/zlib-${ZLIB_VERSION}.tar.gz"
   local src="${WORK_DIR}/zlib"
-  fetch "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" "${archive}"
+  fetch "https://zlib.net/fossils/zlib-${ZLIB_VERSION}.tar.gz" "${archive}"
   extract_tar "${archive}" "${src}"
   (cd "${src}" && ./configure --prefix="${PREFIX}" && make -j"${JOBS}" && make install)
   touch "${stamp}"
