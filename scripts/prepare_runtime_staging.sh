@@ -360,6 +360,8 @@ done
 
 mkdir -p "${TMP_ARCH_DIR}"
 rsync -a --delete --exclude '.pytest_cache' --exclude '__pycache__' --exclude '.DS_Store' "${RUNTIME_SOURCE_DIR}/dj_runtime_py" "${TMP_ARCH_DIR}/"
+mkdir -p "${STAGED_RUNTIME_DIR}/.venv"
+rsync -a --delete --exclude '*.pyc' "${SOURCE_VENV}/" "${STAGED_RUNTIME_DIR}/.venv/"
 rsync -a --delete --exclude '.DS_Store' "${RUNTIME_SOURCE_DIR}/unlock_music_node" "${TMP_ARCH_DIR}/"
 mkdir -p "${STAGED_FF_DIR}"
 cp -f "${SOURCE_FFMPEG}" "${STAGED_FF_DIR}/ffmpeg"
