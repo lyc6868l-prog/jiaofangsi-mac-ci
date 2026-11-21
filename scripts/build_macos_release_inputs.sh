@@ -247,7 +247,7 @@ build_lame() {
       --disable-frontend \
       --disable-decoder \
       --disable-dependency-tracking && \
-    make -j"${JOBS}" && make install)
+    make -j"${JOBS}" && make install FRAMEWORKINSTALLAPPSPREFIX="${PYTHON_PREFIX}")
   touch "${stamp}"
 }
 
@@ -356,7 +356,7 @@ build_python() {
       --with-openssl="${PREFIX}" \
       --enable-ipv6 \
       ac_cv_prog_HAVE_GCC=no && \
-    make -j"${JOBS}" && make install)
+    make -j"${JOBS}" && make install FRAMEWORKINSTALLAPPSPREFIX="${PYTHON_PREFIX}")
   cp -R "${PYTHON_PREFIX}/Python.framework" "${PYTHON_FRAMEWORK_DIR}"
   assert_minos "${PYTHON_FRAMEWORK_DIR}/Versions/3.11/bin/python3.11" "${TARGET_MACOS_MIN_VERSION}"
   assert_minos "${PYTHON_FRAMEWORK_DIR}/Versions/3.11/Python" "${TARGET_MACOS_MIN_VERSION}"
