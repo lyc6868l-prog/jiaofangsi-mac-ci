@@ -380,7 +380,8 @@ build_node() {
     export CPPFLAGS="" CFLAGS="${MACOS_CFLAGS}" CXXFLAGS="${MACOS_CXXFLAGS}" LDFLAGS="${MACOS_LDFLAGS}" && \
     export PKG_CONFIG_PATH="${ASCII_ZLIB_PKGCONFIG_DIR}" PKG_CONFIG_LIBDIR="${ASCII_ZLIB_PKGCONFIG_DIR}" && \
     export GYP_DEFINES="mac_deployment_target=${TARGET_MACOS_MIN_VERSION} node_shared_zlib=true" && \
-    ./configure --dest-cpu=x64 --dest-os=mac --without-npm --shared-zlib --shared-zlib-includes="${ASCII_ZLIB_PREFIX}/include" --shared-zlib-libpath="${ASCII_ZLIB_PREFIX}/lib" && \
+    if [ "${ARCH}" = "arm64" ]; then node_cpu=arm64; else node_cpu=x64; fi && 
+    ./configure --dest-cpu="${node_cpu}" --dest-os=mac --without-npm --shared-zlib --shared-zlib-includes="${ASCII_ZLIB_PREFIX}/include" --shared-zlib-libpath="${ASCII_ZLIB_PREFIX}/lib" && \
     make -j"${JOBS}" V= && \
     mkdir -p "${OUTPUT_ROOT}/node/bin" && cp -f out/Release/node "${NODE_BIN}")
   assert_minos "${NODE_BIN}" "${TARGET_MACOS_MIN_VERSION}"
