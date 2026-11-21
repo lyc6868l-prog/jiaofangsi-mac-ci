@@ -238,16 +238,17 @@ build_lame() {
   local src="${WORK_DIR}/lame"
   fetch "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz" "${archive}"
   extract_tar "${archive}" "${src}"
+  if [ "${ARCH}" = "arm64" ]; then host_arch=aarch64; else host_arch=x86_64; fi
   (cd "${src}" && \
     ./configure \
       --prefix="${PREFIX}" \
-      --host=${ARCH}-apple-darwin \
+      --host=${host_arch}-apple-darwin \
       --disable-shared \
       --enable-static \
       --disable-frontend \
       --disable-decoder \
       --disable-dependency-tracking && \
-    make -j"${JOBS}" && make install PYTHONAPPSDIR="${PYTHON_PREFIX}/Applications")
+    make -j"${JOBS}" && make install)
   touch "${stamp}"
 }
 
