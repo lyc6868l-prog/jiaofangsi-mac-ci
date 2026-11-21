@@ -94,6 +94,7 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
   int _selectedGift = 0;
   bool _paying = false;
   String? _error;
+  final List<int> _quantities = List<int>.filled(_gifts.length, 1);
   List<_RankItem> _remoteRanks = const <_RankItem>[];
 
   @override
@@ -163,6 +164,7 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
         token: widget.token,
         authMode: widget.authMode,
         tierId: gift.tierId,
+        quantity: _quantities[_selectedGift],
       );
       await openUrl(order.paymentUrl);
       if (mounted) {
@@ -330,14 +332,48 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
             crossAxisCount: 2,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
-            mainAxisExtent: 98,
+            mainAxisExtent: 136,
           ),
           itemBuilder: (BuildContext context, int index) {
             return _buildGiftCard(_gifts[index], index);
           },
         ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 36,
+          child: FilledButton(
+            onPressed: _paying ? null : _submitPayment,
+            style: FilledButton.styleFrom(
+              backgroundColor: shellAccentPinkDeep,
+              foregroundColor: shellTextPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              _paying
+                  ? '正在创建订单…'
+                  : '确认支付 ¥${_gifts[_selectedGift].price * _quantities[_selectedGift]}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  void _changeQuantity(int index, int delta) {
+    if (_paying) return;
+    setState(() {
+      _selectedGift = index;
+      _quantities[index] = (_quantities[index] + delta).clamp(1, 99);
+      _error = null;
+    });
+  }
+
+  Future<void> _submitPayment() async {
+    await _pay(_gifts[_selectedGift]);
   }
 
   Widget _buildGiftCard(_GiftItem gift, int index) {
@@ -346,8 +382,10 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
       onTap: _paying
           ? null
           : () {
-              setState(() => _selectedGift = index);
-              unawaited(_pay(gift));
+              setState(() {
+                _selectedGift = index;
+                _error = null;
+              });
             },
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -363,47 +401,82 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
                 : Colors.white.withValues(alpha: 0.05),
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: shellPanelTop,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-              ),
-              alignment: Alignment.center,
-              child: Icon(gift.icon, size: 27, color: shellAccentGold),
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: shellPanelTop,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(gift.icon, size: 23, color: shellAccentGold),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        gift.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected ? shellTextPrimary : shellTextSoft,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '¥${gift.price}',
+                        style: const TextStyle(
+                          color: shellAccentGold,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Text(
-                    gift.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: selected ? shellTextPrimary : shellTextSoft,
-                      fontSize: 13,
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                _QuantityButton(
+                  icon: Icons.remove,
+                  enabled: _quantities[index] > 1 && !_paying,
+                  onTap: () => _changeQuantity(index, -1),
+                ),
+                SizedBox(
+                  width: 30,
+                  child: Text(
+                    '${_quantities[index]}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: shellTextPrimary,
+                      fontSize: 12,
+                      fontFamily: 'monospace',
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '¥${gift.price}',
-                    style: const TextStyle(
-                      color: shellAccentGold,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                _QuantityButton(
+                  icon: Icons.add,
+                  enabled: _quantities[index] < 99 && !_paying,
+                  onTap: () => _changeQuantity(index, 1),
+                ),
+              ],
             ),
           ],
         ),
@@ -493,6 +566,83 @@ class _SimplifiedTipDialogState extends State<_SimplifiedTipDialog> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _QtyChip extends StatelessWidget {
+  const _QtyChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? shellAccentPinkDeep.withValues(alpha: 0.2)
+              : shellPanelSurface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? shellAccentRed.withValues(alpha: 0.7)
+                : Colors.white.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? shellTextPrimary : shellTextMuted,
+            fontSize: 10,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuantityButton extends StatelessWidget {
+  const _QuantityButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: shellPanelTop,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Icon(
+          icon,
+          size: 13,
+          color: enabled ? shellTextSoft : shellTextPlaceholder,
+        ),
       ),
     );
   }

@@ -49,6 +49,7 @@ class TipPaymentService {
     required String token,
     required String authMode,
     required String tierId,
+    required int quantity,
   }) async {
     final bool unified = authMode == 'unified';
     final Uri uri = Uri.parse(
@@ -60,7 +61,9 @@ class TipPaymentService {
       final HttpClientRequest request = await _client.postUrl(uri);
       request.headers.contentType = ContentType.json;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.write(jsonEncode(<String, Object?>{'tier_id': tierId}));
+      request.write(
+        jsonEncode(<String, Object?>{'tier_id': tierId, 'quantity': quantity}),
+      );
       final HttpClientResponse response = await request.close();
       final String text = await response.transform(utf8.decoder).join();
       final Object? decoded = text.trim().isEmpty ? null : jsonDecode(text);
