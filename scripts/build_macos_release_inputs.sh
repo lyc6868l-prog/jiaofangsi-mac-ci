@@ -368,24 +368,16 @@ build_python() {
 build_node() {
   local stamp="${STAMP_DIR}/node"
   [ -f "${stamp}" ] && return
-  local archive="${SRC_DIR}/node-v${NODE_VERSION}.tar.gz"
-  local src="${WORK_DIR}/node"
-  fetch "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.gz" "${archive}"
+  local node_arch
+  if [ "${ARCH}" = "arm64" ]; then node_arch=arm64; else node_arch=x64; fi
+  local archive="${SRC_DIR}/node-v${NODE_VERSION}-darwin-${node_arch}.tar.gz"
+  local src="${WORK_DIR}/node-prebuilt-${node_arch}"
+  fetch "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-darwin-${node_arch}.tar.gz" "${archive}"
   extract_tar "${archive}" "${src}"
-  patch_node_v8_zlib "${src}"
-  prepare_ascii_zlib_pkgconfig
   rm -rf "${OUTPUT_ROOT}/node"
-  mkdir -p "${OUTPUT_ROOT}/node"
-  (cd "${src}" && \
-    export CC_host="${CC}" CXX_host="${CXX}" AR_host="${AR}" && \
-    export CC="${CC}" CXX="${CXX}" PYTHON="/usr/bin/python3" && \
-    export CPPFLAGS="" CFLAGS="${MACOS_CFLAGS}" CXXFLAGS="${MACOS_CXXFLAGS}" LDFLAGS="${MACOS_LDFLAGS}" && \
-    export PKG_CONFIG_PATH="${ASCII_ZLIB_PKGCONFIG_DIR}" PKG_CONFIG_LIBDIR="${ASCII_ZLIB_PKGCONFIG_DIR}" && \
-    export GYP_DEFINES="mac_deployment_target=${TARGET_MACOS_MIN_VERSION} node_shared_zlib=true" && \
-    if [ "${ARCH}" = "arm64" ]; then node_cpu=arm64; else node_cpu=x64; fi && 
-    ./configure --dest-cpu="${node_cpu}" --dest-os=mac --without-npm --shared-zlib --shared-zlib-includes="${ASCII_ZLIB_PREFIX}/include" --shared-zlib-libpath="${ASCII_ZLIB_PREFIX}/lib" && \
-    make -j"${JOBS}" V= && \
-    mkdir -p "${OUTPUT_ROOT}/node/bin" && cp -f out/Release/node "${NODE_BIN}")
+  mkdir -p "${OUTPUT_ROOT}/node/bin"
+  cp -f "${src}/bin/node" "${NODE_BIN}"
+  chmod 755 "${NODE_BIN}"
   assert_minos "${NODE_BIN}" "${TARGET_MACOS_MIN_VERSION}"
   touch "${stamp}"
 }
