@@ -446,6 +446,10 @@ PY
   export REQUESTS_CA_BUNDLE="${certifi_bundle}"
   export CURL_CA_BUNDLE="${certifi_bundle}"
   export PIP_CERT="${certifi_bundle}"
+  OPENSSL_DIR="${PREFIX}" \
+  OPENSSL_LIB_DIR="${PREFIX}/lib" \
+  OPENSSL_INCLUDE_DIR="${PREFIX}/include" \
+  PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig" \
   CARGO_BUILD_TARGET="${CARGO_ARCH}-apple-darwin" \
   PYO3_PYTHON="${vpy}" \
   MACOSX_DEPLOYMENT_TARGET="${TARGET_MACOS_MIN_VERSION}" \
