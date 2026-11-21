@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pinyin_generator_flutter_python_rpc.schema.json",
+  "title": "pinyin_generator Flutter Python RPC",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "module": {
+      "const": "pinyin_generator"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "load_targets",
+        "lock_config",
+        "start_pinyin_generator_task",
+        "fetch_pinyin_generator_result",
+        "stop_task",
+        "subscribe_task_events"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": ["object", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_MODULE",
+            "INVALID_CONFIG",
+            "EMPTY_TARGETS",
+            "TARGET_NOT_FOUND",
+            "TASK_NOT_FOUND",
+            "TASK_ALREADY_RUNNING",
+            "TASK_NOT_COMPLETED",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "task_created",
+        "task_progress",
+        "task_status_changed",
+        "task_finished"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

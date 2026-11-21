@@ -1,0 +1,101 @@
+{
+  "requests": {
+    "load_targets": {
+      "request_id": "req_001",
+      "module": "cleanup_dup",
+      "action": "load_targets",
+      "payload": {
+        "panel": "title_clean",
+        "file_paths": [
+          "/music/A.mp3",
+          "/music/B.mp3"
+        ]
+      }
+    },
+    "lock_config": {
+      "request_id": "req_002",
+      "module": "cleanup_dup",
+      "action": "lock_config",
+      "payload": {
+        "panel": "duplicate_search",
+        "config": {
+          "matching_mode": "极速比对",
+          "move_to_recycle_bin": true
+        }
+      }
+    },
+    "start_duplicate_check_task": {
+      "request_id": "req_003",
+      "module": "cleanup_dup",
+      "action": "start_duplicate_check_task",
+      "payload": {
+        "panel": "duplicate_search"
+      }
+    },
+    "execute_delete": {
+      "request_id": "req_004",
+      "module": "cleanup_dup",
+      "action": "execute_delete",
+      "payload": {
+        "task_id": "task_dup_001",
+        "move_to_recycle_bin": true,
+        "selected_files": [
+          {
+            "path": "/music/Fade_copy.mp3",
+            "name": "Fade_copy.mp3",
+            "size": "8.2 MB"
+          }
+        ]
+      }
+    }
+  },
+  "responses": {
+    "success": {
+      "request_id": "req_003",
+      "ok": true,
+      "data": {
+        "task_id": "task_dup_001",
+        "panel": "duplicate_search",
+        "task_type": "duplicate_check",
+        "status": "running"
+      },
+      "error": null
+    },
+    "error": {
+      "request_id": "req_004",
+      "ok": false,
+      "data": null,
+      "error": {
+        "code": "DELETE_SELECTION_EMPTY",
+        "message": "请至少勾选 1 项删除目标。"
+      }
+    }
+  },
+  "events": {
+    "task_progress": {
+      "module": "cleanup_dup",
+      "event": "task_progress",
+      "task_id": "task_dup_001",
+      "data": {
+        "panel": "duplicate_search",
+        "status": "running",
+        "progress": 0.46,
+        "progress_hint_text": "正在高速扫描扇区数据...",
+        "file_count": 15,
+        "duplicate_count": 3
+      }
+    },
+    "review_ready": {
+      "module": "cleanup_dup",
+      "event": "review_ready",
+      "task_id": "task_dup_001",
+      "data": {
+        "panel": "duplicate_search",
+        "status": "review_ready",
+        "progress": 1.0,
+        "progress_hint_text": "发现重复项，请审阅确认。",
+        "duplicate_count": 2
+      }
+    }
+  }
+}

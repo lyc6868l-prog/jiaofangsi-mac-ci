@@ -1,0 +1,224 @@
+{
+  "unlock_music": {
+    "requests": {
+      "load_targets": {
+        "request_id": "req_001",
+        "module": "unlock_music",
+        "action": "load_targets",
+        "payload": {
+          "panel": "unlock",
+          "file_paths": [
+            "/music/Fade.qmc0",
+            "/music/Broken.ncm"
+          ]
+        }
+      },
+      "lock_config": {
+        "request_id": "req_002",
+        "module": "unlock_music",
+        "action": "lock_config",
+        "payload": {
+          "panel": "unlock",
+          "config": {
+            "output_dir": "/output",
+            "overwrite": false,
+            "keep_source": true
+          }
+        }
+      },
+      "start_unlock_task": {
+        "request_id": "req_003",
+        "module": "unlock_music",
+        "action": "start_unlock_task",
+        "payload": {
+          "panel": "unlock"
+        }
+      },
+      "fetch_unlock_result": {
+        "request_id": "req_004",
+        "module": "unlock_music",
+        "action": "fetch_unlock_result",
+        "payload": {
+          "task_id": "task_unlock_001"
+        }
+      }
+    },
+    "responses": {
+      "success": {
+        "request_id": "req_003",
+        "ok": true,
+        "data": {
+          "task_id": "task_unlock_001",
+          "panel": "unlock",
+          "task_type": "unlock",
+          "status": "running",
+          "progress": 0.01,
+          "progress_hint_text": "正在准备解锁任务...",
+          "file_count": 2,
+          "success_count": 0,
+          "failed_count": 0
+        },
+        "error": null
+      },
+      "error": {
+        "request_id": "req_004",
+        "ok": false,
+        "data": null,
+        "error": {
+          "code": "TASK_NOT_COMPLETED",
+          "message": "当前任务仍在运行中。"
+        }
+      }
+    },
+    "events": {
+      "task_progress": {
+        "module": "unlock_music",
+        "event": "task_progress",
+        "task_id": "task_unlock_001",
+        "data": {
+          "panel": "unlock",
+          "task_type": "unlock",
+          "status": "running",
+          "progress": 0.5,
+          "progress_hint_text": "正在解锁... 1/2",
+          "file_count": 2,
+          "success_count": 1,
+          "failed_count": 0
+        }
+      },
+      "task_finished": {
+        "module": "unlock_music",
+        "event": "task_finished",
+        "task_id": "task_unlock_001",
+        "data": {
+          "panel": "unlock",
+          "task_type": "unlock",
+          "status": "success",
+          "progress": 1.0,
+          "progress_hint_text": "解锁任务执行完毕。",
+          "file_count": 2,
+          "success_count": 1,
+          "failed_count": 1
+        }
+      }
+    }
+  },
+  "search_download": {
+    "requests": {
+      "lock_config": {
+        "request_id": "req_101",
+        "module": "search_download",
+        "action": "lock_config",
+        "payload": {
+          "panel": "search",
+          "config": {
+            "output_dir": "/output",
+            "sources": [
+              "QQ音乐",
+              "酷我音乐"
+            ],
+            "playlist_url": "https://music.example/playlist/123"
+          }
+        }
+      },
+      "start_playlist_parse_task": {
+        "request_id": "req_102",
+        "module": "search_download",
+        "action": "start_playlist_parse_task",
+        "payload": {
+          "panel": "search"
+        }
+      },
+      "start_download_task": {
+        "request_id": "req_103",
+        "module": "search_download",
+        "action": "start_download_task",
+        "payload": {
+          "panel": "search",
+          "song_infos": [
+            {
+              "source": "QQMusicClient",
+              "song_name": "Fade",
+              "identifier": "song_001",
+              "with_valid_download_url": true
+            }
+          ]
+        }
+      },
+      "fetch_download_result": {
+        "request_id": "req_104",
+        "module": "search_download",
+        "action": "fetch_download_result",
+        "payload": {
+          "task_id": "task_download_001"
+        }
+      }
+    },
+    "responses": {
+      "success": {
+        "request_id": "req_102",
+        "ok": true,
+        "data": {
+          "task_id": "task_playlist_parse_001",
+          "panel": "search",
+          "task_type": "playlist_parse",
+          "status": "running",
+          "progress": 0.01,
+          "progress_hint_text": "正在准备任务...",
+          "total_count": 0,
+          "success_count": 0,
+          "failed_count": 0,
+          "log_lines": []
+        },
+        "error": null
+      },
+      "error": {
+        "request_id": "req_104",
+        "ok": false,
+        "data": null,
+        "error": {
+          "code": "TASK_NOT_COMPLETED",
+          "message": "当前任务仍在运行中。"
+        }
+      }
+    },
+    "events": {
+      "task_progress": {
+        "module": "search_download",
+        "event": "task_progress",
+        "task_id": "task_download_001",
+        "data": {
+          "panel": "search",
+          "task_type": "download",
+          "status": "running",
+          "progress": 0.4,
+          "progress_hint_text": "正在下载: Fade",
+          "total_count": 1,
+          "success_count": 0,
+          "failed_count": 0,
+          "log_lines": [
+            "[System] 开始下载: Fade"
+          ]
+        }
+      },
+      "task_finished": {
+        "module": "search_download",
+        "event": "task_finished",
+        "task_id": "task_download_001",
+        "data": {
+          "panel": "search",
+          "task_type": "download",
+          "status": "success",
+          "progress": 1.0,
+          "progress_hint_text": "下载任务执行完毕。",
+          "total_count": 1,
+          "success_count": 1,
+          "failed_count": 0,
+          "log_lines": [
+            "[System] 下载完成: Fade"
+          ]
+        }
+      }
+    }
+  }
+}

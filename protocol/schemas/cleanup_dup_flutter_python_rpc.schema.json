@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cleanup_dup_flutter_python_rpc.schema.json",
+  "title": "cleanup_dup Flutter Python RPC",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "module": {
+      "const": "cleanup_dup"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "load_targets",
+        "lock_config",
+        "start_title_clean_task",
+        "start_duplicate_check_task",
+        "stop_task",
+        "fetch_review_result",
+        "execute_delete",
+        "subscribe_task_events"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": ["object", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_MODULE",
+            "INVALID_CONFIG",
+            "EMPTY_TARGETS",
+            "TARGET_NOT_FOUND",
+            "TASK_NOT_FOUND",
+            "TASK_ALREADY_RUNNING",
+            "TASK_NOT_REVIEW_READY",
+            "DELETE_SELECTION_EMPTY",
+            "FILE_DELETE_FAILED",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "task_created",
+        "task_progress",
+        "task_status_changed",
+        "review_ready",
+        "task_finished",
+        "task_error"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

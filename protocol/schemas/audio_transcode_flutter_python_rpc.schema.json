@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "audio_transcode_flutter_python_rpc.schema.json",
+  "title": "audio_transcode Flutter Python RPC",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "module": {
+      "const": "audio_transcode"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "load_targets",
+        "lock_config",
+        "start_audio_transcode_task",
+        "stop_task",
+        "subscribe_task_events",
+        "fetch_transcode_result"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": ["object", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "task_created",
+        "task_progress",
+        "task_status_changed",
+        "task_finished",
+        "task_error"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Auth Flutter Python RPC Schema",
+  "description": "Flutter <-> Python 认证模块协议 schema",
+  "definitions": {
+    "BaseRequest": {
+      "type": "object",
+      "required": ["module", "action", "payload"],
+      "properties": {
+        "request_id": { "type": ["string", "null"] },
+        "module": { "const": "auth" },
+        "action": { "type": "string" },
+        "payload": { "type": "object" }
+      }
+    },
+    "BaseResponse": {
+      "type": "object",
+      "required": ["request_id", "ok", "data", "error"],
+      "properties": {
+        "request_id": { "type": ["string", "null"] },
+        "ok": { "type": "boolean" },
+        "data": { "type": ["object", "null"] },
+        "error": {
+          "type": ["object", "null"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "login": {
+      "request": {
+        "action": { "const": "login" },
+        "payload": {
+          "type": "object",
+          "required": ["email", "password"],
+          "properties": {
+            "email": { "type": "string" },
+            "password": { "type": "string" },
+            "remember": { "type": "boolean" },
+            "auto_login": { "type": "boolean" }
+          }
+        }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "token": { "type": "string" },
+            "user_id": { "type": "string" },
+            "email": { "type": "string" },
+            "expires_at": { "type": "string" }
+          }
+        }
+      }
+    },
+    "logout": {
+      "request": {
+        "action": { "const": "logout" },
+        "payload": {
+          "type": "object",
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" }
+          }
+        }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "restore_session": {
+      "request": {
+        "action": { "const": "restore_session" },
+        "payload": { "type": "object" }
+      },
+      "response": {
+        "data": {
+          "type": ["object", "null"],
+          "properties": {
+            "token": { "type": "string" },
+            "user_id": { "type": "string" },
+            "email": { "type": "string" },
+            "expires_at": { "type": "string" },
+            "is_vip": { "type": "boolean" },
+            "vip_expires_at": { "type": ["string", "null"] },
+            "nickname": { "type": ["string", "null"] },
+            "need_network_validation": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "check_entitlement": {
+      "request": {
+        "action": { "const": "check_entitlement" },
+        "payload": {
+          "type": "object",
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" }
+          }
+        }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "is_vip": { "type": "boolean" },
+            "vip_expires_at": { "type": ["string", "null"] },
+            "features": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "get_profile": {
+      "request": {
+        "action": { "const": "get_profile" },
+        "payload": {
+          "type": "object",
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" }
+          }
+        }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "email": { "type": "string" },
+            "nickname": { "type": "string" }
+          }
+        }
+      }
+    },
+    "load_login_prefill": {
+      "request": {
+        "action": { "const": "load_login_prefill" },
+        "payload": { "type": "object" }
+      },
+      "response": {
+        "data": {
+          "type": ["object", "null"],
+          "properties": {
+            "email": { "type": "string" },
+            "remember": { "type": "boolean" },
+            "auto_login": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "error_codes": {
+    "INVALID_ACTION": "未知 action",
+    "INTERNAL_ERROR": "内部错误",
+    "AUTH_ERROR": "认证错误"
+  }
+}

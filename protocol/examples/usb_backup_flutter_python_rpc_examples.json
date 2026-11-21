@@ -1,0 +1,241 @@
+{
+  "requests": {
+    "list_usb_volumes": {
+      "request_id": "req_001",
+      "module": "usb_backup",
+      "action": "list_usb_volumes",
+      "payload": {}
+    },
+    "start_backup_usb": {
+      "request_id": "req_002",
+      "module": "usb_backup",
+      "action": "start_backup_usb",
+      "payload": {
+        "source_path": "/Volumes/PIONEER",
+        "display_name": "主演出盘"
+      }
+    },
+    "start_restore_snapshot_to_usb": {
+      "request_id": "req_003",
+      "module": "usb_backup",
+      "action": "start_restore_snapshot_to_usb",
+      "payload": {
+        "snapshot_id": "snapshot_20260407T183000Z",
+        "target_path": "/Volumes/NEW_USB",
+        "clear_target": true
+      }
+    },
+    "start_format_usb": {
+      "request_id": "req_006",
+      "module": "usb_backup",
+      "action": "start_format_usb",
+      "payload": {
+        "target_path": "/Volumes/NEW_USB",
+        "filesystem": "fat32",
+        "volume_label": "PIONEER"
+      }
+    },
+    "delete_backup_version": {
+      "request_id": "req_007",
+      "module": "usb_backup",
+      "action": "delete_backup_version",
+      "payload": {
+        "snapshot_id": "snapshot_20260407T183000Z"
+      }
+    },
+    "cleanup_repository": {
+      "request_id": "req_008",
+      "module": "usb_backup",
+      "action": "cleanup_repository",
+      "payload": {}
+    }
+  },
+  "responses": {
+    "list_backup_versions": {
+      "request_id": "req_004",
+      "ok": true,
+      "data": {
+        "repo_root": "/Users/demo/Documents/DJ_Workbench/USB_Backups/repo",
+        "pending_backups": [
+          {
+            "checkpoint_id": "checkpoint_001",
+            "snapshot_id": "snapshot_resume",
+            "display_name": "主演出盘续传",
+            "created_at": "2026-04-07T17:30:00Z",
+            "updated_at": "2026-04-07T17:45:00Z",
+            "source_root": "/Volumes/PIONEER",
+            "source_volume_name": "PIONEER",
+            "total_files": 3000,
+            "completed_files": 1200,
+            "total_bytes": 36000000000,
+            "completed_bytes": 14400000000,
+            "rekordbox_detected": true
+          }
+        ],
+        "target_volume": {
+          "path": "/Volumes/NEW_USB",
+          "volume_name": "NEW_USB",
+          "filesystem": "exfat",
+          "normalized_filesystem": "exfat",
+          "is_cdj_supported_fs": true,
+          "requires_format_before_restore": false
+        },
+        "latest_versions": [
+          {
+            "snapshot_id": "snapshot_20260407T183000Z",
+            "display_name": "主演出盘",
+            "created_at": "2026-04-07T18:30:00Z",
+            "source_volume_name": "PIONEER",
+            "total_files": 2048,
+            "total_bytes": 2147483648,
+            "validate_status": "success",
+            "rekordbox_summary": {
+              "has_pioneer_dir": true,
+              "has_dot_pioneer_dir": false,
+              "has_contents_dir": true,
+              "has_export_library_db": true,
+              "audio_file_count": 128,
+              "artwork_file_count": 24,
+              "analysis_file_count": 96,
+              "playlist_sync_count": 4,
+              "database_file_count": 1,
+              "music_bytes": 6000000000
+            },
+            "can_restore": true,
+            "disabled_reason": null,
+            "recommended": true
+          }
+        ]
+      },
+      "error": null
+    },
+    "capacity_error": {
+      "request_id": "req_003",
+      "ok": false,
+      "data": null,
+      "error": {
+        "code": "CAPACITY_INSUFFICIENT",
+        "message": "目标U盘容量不足，无法恢复该备份。"
+      }
+    },
+    "unsupported_filesystem": {
+      "request_id": "req_005",
+      "ok": false,
+      "data": null,
+      "error": {
+        "code": "UNSUPPORTED_FILESYSTEM",
+        "message": "当前U盘文件系统为 apfs，CDJ 仅支持 FAT32 或 ExFAT。请先格式化后再恢复。"
+      }
+    },
+    "resume_started": {
+      "request_id": "req_002",
+      "ok": true,
+      "data": {
+        "task_id": "usb_task_001",
+        "task_type": "backup",
+        "status": "running",
+        "progress": 0.01,
+        "progress_hint_text": "检测到未完成备份，正在继续上次进度...",
+        "resumed_from_checkpoint": true,
+        "checkpoint_id": "checkpoint_001"
+      },
+      "error": null
+    },
+    "format_started": {
+      "request_id": "req_006",
+      "ok": true,
+      "data": {
+        "task_id": "usb_task_003",
+        "task_type": "format",
+        "status": "running",
+        "progress": 0.24,
+        "progress_hint_text": "正在格式化 NEW_USB 为 FAT32...",
+        "display_name": "PIONEER"
+      },
+      "error": null
+    },
+    "delete_backup_version": {
+      "request_id": "req_007",
+      "ok": true,
+      "data": {
+        "snapshot_id": "snapshot_20260407T183000Z",
+        "deleted_snapshots": 1,
+        "deleted_objects": 2,
+        "deleted_bytes": 2048
+      },
+      "error": null
+    },
+    "cleanup_repository": {
+      "request_id": "req_008",
+      "ok": true,
+      "data": {
+        "deleted_objects": 3,
+        "deleted_bytes": 4096
+      },
+      "error": null
+    }
+  },
+  "events": {
+    "task_progress": {
+      "module": "usb_backup",
+      "event": "task_progress",
+      "task_id": "usb_task_001",
+      "data": {
+        "task_type": "backup",
+        "status": "running",
+        "progress": 0.56,
+        "progress_hint_text": "正在写入快照对象... 56%",
+        "display_name": "主演出盘",
+        "total_files": 2048,
+        "total_bytes": 2147483648
+      }
+    },
+    "task_finished": {
+      "module": "usb_backup",
+      "event": "task_finished",
+      "task_id": "usb_task_001",
+      "data": {
+        "task_type": "backup",
+        "status": "success",
+        "progress": 1.0,
+        "progress_hint_text": "备份完成。",
+        "display_name": "主演出盘",
+        "snapshot_id": "snapshot_20260407T183000Z"
+      }
+    },
+    "restore_validation": {
+      "module": "usb_backup",
+      "event": "task_finished",
+      "task_id": "usb_task_009",
+      "data": {
+        "task_type": "restore",
+        "status": "success",
+        "progress": 1.0,
+        "progress_hint_text": "恢复完成。",
+        "display_name": "主演出盘",
+        "snapshot_id": "snapshot_20260407T183000Z",
+        "restore_validation": {
+          "checked_at": "2026-04-07T20:00:00Z",
+          "target_root": "/Volumes/NEW_USB",
+          "files_present_ok": true,
+          "rekordbox_layout_ok": true,
+          "missing_files": 0,
+          "mismatched_files": 0,
+          "message": "恢复后校验通过：音频 128 个，封面 24 个，分析文件 96 个。",
+          "rekordbox_summary": {
+            "has_pioneer_dir": true,
+            "has_dot_pioneer_dir": false,
+            "has_contents_dir": true,
+            "has_export_library_db": true,
+            "audio_file_count": 128,
+            "artwork_file_count": 24,
+            "analysis_file_count": 96,
+            "playlist_sync_count": 4,
+            "database_file_count": 1,
+            "music_bytes": 6000000000
+          }
+        }
+      }
+    }
+  }
+}

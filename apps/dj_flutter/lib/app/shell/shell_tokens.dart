@@ -1,0 +1,40 @@
+import 'package:flutter/material.dart';
+
+const Color shellTextMuted = Color(0xFF9CA3AF);
+const Color shellTextPrimary = Color(0xFFF3F4F6);
+const Color shellTextSecondary = Color(0xFFD1D5DB);
+const Color shellTextSoft = Color(0xFFE5E7EB);
+const Color shellTextHint = Color(0xFFB0B7C3);
+const Color shellTextPlaceholder = Color(0xFF6B7280);
+const Color shellTextSilver = Color(0xFF9CA3AF);
+
+const Color shellAccentBlue = Color(0xFF0EA5E9);
+const Color shellAccentBlueBright = Color(0xFF38BDF8);
+const Color shellAccentBlueDeep = Color(0xFF0284C7);
+const Color shellAccentGold = Color(0xFFFBBF24);
+const Color shellAccentPurple = Color(0xFFA855F7);
+const Color shellAccentPink = Color(0xFFF43F5E);
+const Color shellAccentPinkDeep = Color(0xFFE11D48);
+const Color shellAccentRed = Color(0xFFEF4444);
+const Color shellAccentRedSoft = Color(0xFFF87171);
+const Color shellAccentGreen = Color(0xFF10B981);
+const Color shellAccentGreenDeep = Color(0xFF047857);
+const Color shellAccentAmber = Color(0xFFF59E0B);
+const Color shellAccentAmberDeep = Color(0xFFD97706);
+const Color shellAccentEmber = Color(0xFF9A3412);
+const Color shellAccentEmberDeep = Color(0xFF451A03);
+const Color shellAccentDangerDeep = Color(0xFFB91C1C);
+
+const Color shellPanelTop = Color(0xFF0D0D12);
+const Color shellPanelBottom = Color(0xFF050508);
+const Color shellPanelSurface = Color(0xFF060608);
+const Color shellPanelDark = Color(0xFF020202);
+const Color shellPanelRedDark = Color(0xFF0A0005);
+const Color shellPanelBlack = Color(0xFF030303);
+const Color shellWindowFillTop = Color(0xFF2D2D32);
+const Color shellWindowFillMid = Color(0xFF1E1E23);
+const Color shellWindowFillBottom = Color(0xFF19191E);
+const Color shellWindowFillBase = Color(0xFF0F0F12);
+const Color shellLedOff = Color(0xFF111111);
+const Color shellLedOffGlow = Color(0x00000000);
+const Color shellAccentBlueCyanDeep = Color(0xFF0369A1);

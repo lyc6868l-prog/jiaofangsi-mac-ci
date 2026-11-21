@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Guest Flutter Python RPC Schema",
+  "description": "Flutter <-> Python 游客模块协议 schema",
+  "definitions": {
+    "BaseRequest": {
+      "type": "object",
+      "required": ["module", "action", "payload"],
+      "properties": {
+        "request_id": { "type": ["string", "null"] },
+        "module": { "const": "guest" },
+        "action": { "type": "string" },
+        "payload": { "type": "object" }
+      }
+    },
+    "BaseResponse": {
+      "type": "object",
+      "required": ["request_id", "ok", "data", "error"],
+      "properties": {
+        "request_id": { "type": ["string", "null"] },
+        "ok": { "type": "boolean" },
+        "data": { "type": ["object", "null"] },
+        "error": {
+          "type": ["object", "null"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "register_guest": {
+      "request": {
+        "action": { "const": "register_guest" },
+        "payload": { "type": "object" }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "guest_token": { "type": "string" },
+            "expires_at": { "type": "string" },
+            "remaining_hours": { "type": "number" },
+            "device_id": { "type": "string" }
+          }
+        }
+      }
+    },
+    "check_guest_status": {
+      "request": {
+        "action": { "const": "check_guest_status" },
+        "payload": {
+          "type": "object",
+          "required": ["guest_token"],
+          "properties": {
+            "guest_token": { "type": "string" }
+          }
+        }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "is_valid": { "type": "boolean" },
+            "remaining_time": { "type": "string" },
+            "is_expired": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "restore_guest_session": {
+      "request": {
+        "action": { "const": "restore_guest_session" },
+        "payload": { "type": "object" }
+      },
+      "response": {
+        "data": {
+          "type": ["object", "null"],
+          "properties": {
+            "guest_token": { "type": "string" },
+            "expires_at": { "type": "string" },
+            "device_id": { "type": "string" },
+            "is_valid": { "type": "boolean" },
+            "remaining_time": { "type": ["string", "null"] },
+            "is_expired": { "type": "boolean" },
+            "need_network_validation": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "clear_guest_session": {
+      "request": {
+        "action": { "const": "clear_guest_session" },
+        "payload": { "type": "object" }
+      },
+      "response": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "error_codes": {
+    "INVALID_ACTION": "未知 action",
+    "INTERNAL_ERROR": "内部错误",
+    "GUEST_ERROR": "游客错误"
+  }
+}

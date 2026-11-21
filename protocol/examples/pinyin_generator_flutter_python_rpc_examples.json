@@ -1,0 +1,91 @@
+{
+  "requests": {
+    "load_targets": {
+      "request_id": "req_001",
+      "module": "pinyin_generator",
+      "action": "load_targets",
+      "payload": {
+        "panel": "generator",
+        "file_paths": [
+          "/music/夜曲.mp3",
+          "/music/华语合集"
+        ]
+      }
+    },
+    "lock_config": {
+      "request_id": "req_002",
+      "module": "pinyin_generator",
+      "action": "lock_config",
+      "payload": {
+        "panel": "generator",
+        "config": {
+          "write_mode": "overwrite",
+          "max_initials_length": 12,
+          "stopwords": ["mp3", "remix", "vip", "dj"]
+        }
+      }
+    },
+    "start_pinyin_generator_task": {
+      "request_id": "req_003",
+      "module": "pinyin_generator",
+      "action": "start_pinyin_generator_task",
+      "payload": {
+        "panel": "generator"
+      }
+    }
+  },
+  "responses": {
+    "success": {
+      "request_id": "req_003",
+      "ok": true,
+      "data": {
+        "task_id": "task_pinyin_001",
+        "panel": "generator",
+        "task_type": "pinyin_generator",
+        "status": "running"
+      },
+      "error": null
+    },
+    "error": {
+      "request_id": "req_001",
+      "ok": false,
+      "data": null,
+      "error": {
+        "code": "EMPTY_TARGETS",
+        "message": "检测到的文件均为 WAV，当前版本不支持写入专辑字段。"
+      }
+    }
+  },
+  "events": {
+    "task_progress": {
+      "module": "pinyin_generator",
+      "event": "task_progress",
+      "task_id": "task_pinyin_001",
+      "data": {
+        "panel": "generator",
+        "status": "running",
+        "progress": 0.5,
+        "progress_hint_text": "正在写入专辑字段... 1/2",
+        "file_count": 2,
+        "success_count": 1,
+        "skipped_count": 0,
+        "failed_count": 0
+      }
+    },
+    "task_finished": {
+      "module": "pinyin_generator",
+      "event": "task_finished",
+      "task_id": "task_pinyin_001",
+      "data": {
+        "panel": "generator",
+        "status": "success",
+        "progress": 1.0,
+        "progress_hint_text": "首拼写入任务执行完毕。",
+        "file_count": 2,
+        "success_count": 1,
+        "skipped_count": 1,
+        "failed_count": 0
+      }
+    }
+  }
+}

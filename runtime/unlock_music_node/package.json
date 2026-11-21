@@ -1,0 +1,10 @@
+{
+  "name": "unlock-music-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Node unlock worker for dj tool",
+  "scripts": {
+    "start": "node src/main.js"
+  }
+}

@@ -1,0 +1,7 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+
+// Release installers are Intel-only. Apple Silicon Macs run this build through Rosetta.
+ARCHS = x86_64
+EXCLUDED_ARCHS[sdk=macosx*] = arm64
+ONLY_ACTIVE_ARCH = NO

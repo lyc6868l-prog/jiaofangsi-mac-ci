@@ -1,0 +1,78 @@
+name: Build macOS Release DMGs
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version label; defaults to pubspec version"
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: ${{ matrix.label }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x86_64
+            label: Intel
+            rust_target: x86_64-apple-darwin
+          - runner: macos-15
+            arch: arm64
+            label: AppleSilicon
+            rust_target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.6"
+          channel: stable
+          cache: true
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install native build tools
+        run: |
+          brew install cmake nasm autoconf automake libtool pkg-config
+          if ! command -v pod >/dev/null 2>&1; then
+            brew install cocoapods
+          fi
+          pod --version
+
+      - name: Prepare scripts
+        run: |
+          chmod +x scripts/*.sh
+          chmod +x apps/dj_flutter/macos/Runner/bundle_runtime_assets.sh
+          chmod +x 一键修复并打开.command || true
+
+      - name: Build runtime and .app/.dmg
+        env:
+          DJ_RELEASE_ARCH: ${{ matrix.arch }}
+          DJ_RELEASE_JOBS: "4"
+        run: |
+          ./scripts/build_macos_dual_release.sh ${{ matrix.arch }}
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: JFS-macOS-${{ matrix.label }}-${{ github.run_number }}
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 30

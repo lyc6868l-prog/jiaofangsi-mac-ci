@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "usb_backup_flutter_python_rpc.schema.json",
+  "title": "usb_backup Flutter Python RPC",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "module": {
+      "const": "usb_backup"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "list_usb_volumes",
+        "list_backup_versions",
+        "start_backup_usb",
+        "start_restore_snapshot_to_usb",
+        "start_format_usb",
+        "start_validate_snapshot",
+        "delete_backup_version",
+        "cleanup_repository",
+        "stop_task",
+        "subscribe_task_events"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": ["object", "null"]
+    },
+    "resumed_from_checkpoint": {
+      "type": "boolean"
+    },
+    "checkpoint_id": {
+      "type": ["string", "null"]
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_MODULE",
+            "INVALID_CONFIG",
+            "TARGET_NOT_FOUND",
+            "SNAPSHOT_NOT_FOUND",
+            "TASK_NOT_FOUND",
+            "UNSUPPORTED_FILESYSTEM",
+            "CAPACITY_INSUFFICIENT",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "task_created",
+        "task_progress",
+        "task_status_changed",
+        "task_finished"
+      ]
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

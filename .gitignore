@@ -1,0 +1,13 @@
+﻿.DS_Store
+.idea/
+.dart_tool/
+build/
+dist/
+runtime_staging/
+runtime_staging_sources/
+*.dmg
+*.zip
+
+# CI/runtime artifacts are generated on macOS
+apps/dj_flutter/macos/Pods/
+apps/dj_flutter/macos/.symlinks/

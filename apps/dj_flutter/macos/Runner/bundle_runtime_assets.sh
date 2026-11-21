@@ -1,0 +1,730 @@
+#!/bin/sh
+set -e
+
+RUNTIME_SOURCE_DIR="${PROJECT_DIR}/../../../runtime"
+RUNTIME_STAGING_DIR="${PROJECT_DIR}/../../../runtime_staging/macos"
+RUNTIME_DEST_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/runtime"
+APP_BUNDLE_PATH="${TARGET_BUILD_DIR}/${PRODUCT_NAME}.app"
+MACOS_DIR="${APP_BUNDLE_PATH}/Contents/MacOS"
+FRAMEWORKS_DIR="${APP_BUNDLE_PATH}/Contents/Frameworks"
+RESOURCES_DIR="${APP_BUNDLE_PATH}/Contents/Resources"
+TEAM_ID_PREFIX="${EXPANDED_CODE_SIGN_IDENTITY_NAME%%:*}"
+TARGET_RUNTIME_ARCH="${DJ_RUNTIME_TARGET_ARCH:-${CURRENT_ARCH:-x86_64}}"
+TARGET_MACOS_MIN_VERSION="${MACOSX_DEPLOYMENT_TARGET:-10.15}"
+case "${TARGET_RUNTIME_ARCH}" in
+  x86_64|arm64) ;;
+  *) echo "Unsupported DJ_RUNTIME_TARGET_ARCH: ${TARGET_RUNTIME_ARCH}" >&2; exit 2 ;;
+esac
+ALLOW_WORKSPACE_RUNTIME_FALLBACK="${ALLOW_WORKSPACE_RUNTIME_FALLBACK:-0}"
+RUNTIME_SUMMARY_MODE="staged"
+RUNTIME_SUMMARY_AUTH_MODE="shared"
+IS_RELEASE_BUILD=0
+if [ "${CONFIGURATION}" = "Release" ]; then
+  IS_RELEASE_BUILD=1
+fi
+HAS_PUBLISH_SIGNATURE=0
+if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ] && [ "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]; then
+  case "${TEAM_ID_PREFIX}" in
+    "Apple Development"|"Developer ID Application"|"Apple Distribution")
+      HAS_PUBLISH_SIGNATURE=1
+      ;;
+  esac
+fi
+REQUIRE_STAGED_RUNTIME=0
+if [ "${IS_RELEASE_BUILD}" -eq 1 ] || [ "${HAS_PUBLISH_SIGNATURE}" -eq 1 ]; then
+  REQUIRE_STAGED_RUNTIME=1
+fi
+
+codesign_binary() {
+  binary_path="$1"
+  if [ ! -e "${binary_path}" ]; then
+    return
+  fi
+  if [ "${HAS_PUBLISH_SIGNATURE}" -eq 1 ]; then
+    codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --options runtime --timestamp --preserve-metadata=identifier,entitlements,flags "${binary_path}"
+  else
+    codesign --force --sign - "${binary_path}"
+  fi
+}
+
+assert_no_external_deps() {
+  binary_path="$1"
+  if [ ! -f "${binary_path}" ]; then
+    return
+  fi
+  otool -L "${binary_path}" | while IFS= read -r dep_line; do
+    dep_path="$(printf '%s' "${dep_line}" | sed 's/^[[:space:]]*//' | cut -d' ' -f1)"
+    dep_path="${dep_path%:}"
+    if [ -z "${dep_path}" ] || [ "${dep_path}" = "${binary_path}" ]; then
+      continue
+    fi
+    case "${dep_path}" in
+      /Users/*|/opt/homebrew/*|/usr/local/*|*/target/*|/private/var/folders/*)
+        echo "External dependency detected in ${binary_path}" >&2
+        otool -L "${binary_path}" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+sign_macho_tree() {
+  base_dir="$1"
+  if [ ! -d "${base_dir}" ]; then
+    return
+  fi
+  find "${base_dir}" \( -perm -111 -o -name '*.dylib' -o -name '*.so' -o -name '*.node' \) -type f | while IFS= read -r binary_path; do
+    chmod 755 "${binary_path}" 2>/dev/null || true
+    assert_no_external_deps "${binary_path}"
+    codesign_binary "${binary_path}"
+  done
+}
+
+validate_binary_architecture() {
+  binary_path="$1"
+  expected_arch="$2"
+  if [ ! -f "${binary_path}" ]; then
+    return
+  fi
+  file_description="$(file -b "${binary_path}" 2>/dev/null || true)"
+  case "${file_description}" in
+    *Mach-O*)
+      actual_archs="$(lipo -archs "${binary_path}" 2>/dev/null || true)"
+      normalized_archs="$(printf '%s' "${actual_archs}" | tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+      if [ "${normalized_archs}" != "${expected_arch}" ]; then
+        echo "Unexpected architecture for ${binary_path}: ${actual_archs} (expected ${expected_arch})" >&2
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+binary_has_architecture() {
+  binary_path="$1"
+  expected_arch="$2"
+  actual_archs="$(lipo -archs "${binary_path}" 2>/dev/null || true)"
+  printf '%s\n' "${actual_archs}" | tr ' ' '\n' | grep -Fx "${expected_arch}" >/dev/null 2>&1
+}
+
+thin_binary_to_architecture() {
+  binary_path="$1"
+  expected_arch="$2"
+  if [ ! -f "${binary_path}" ]; then
+    return
+  fi
+  file_description="$(file -b "${binary_path}" 2>/dev/null || true)"
+  case "${file_description}" in
+    *Mach-O*) ;;
+    *) return ;;
+  esac
+  actual_archs="$(lipo -archs "${binary_path}" 2>/dev/null || true)"
+  normalized_archs="$(printf '%s' "${actual_archs}" | tr ' ' '\n' | sed '/^$/d' | sort | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  if [ "${normalized_archs}" = "${expected_arch}" ]; then
+    return
+  fi
+  if ! binary_has_architecture "${binary_path}" "${expected_arch}"; then
+    echo "Binary ${binary_path} does not contain required architecture ${expected_arch}: ${actual_archs}" >&2
+    exit 1
+  fi
+  mode_value="$(stat -f '%Lp' "${binary_path}")"
+  tmp_output="${binary_path}.thin-${expected_arch}"
+  rm -f "${tmp_output}"
+  lipo -thin "${expected_arch}" "${binary_path}" -output "${tmp_output}"
+  chmod "${mode_value}" "${tmp_output}"
+  mv "${tmp_output}" "${binary_path}"
+}
+
+thin_macho_tree_to_architecture() {
+  base_dir="$1"
+  expected_arch="$2"
+  if [ ! -d "${base_dir}" ]; then
+    return
+  fi
+  find "${base_dir}" \( -perm -111 -o -name '*.dylib' -o -name '*.so' -o -name '*.node' \) -type f | while IFS= read -r binary_path; do
+    thin_binary_to_architecture "${binary_path}" "${expected_arch}"
+  done
+}
+
+validate_macho_tree_architecture() {
+  base_dir="$1"
+  expected_arch="$2"
+  if [ ! -d "${base_dir}" ]; then
+    return
+  fi
+  find "${base_dir}" \( -perm -111 -o -name '*.dylib' -o -name '*.so' -o -name '*.node' \) -type f | while IFS= read -r binary_path; do
+    validate_binary_architecture "${binary_path}" "${expected_arch}"
+  done
+}
+
+validate_runtime_tree_architecture() {
+  runtime_dir="$1"
+  expected_arch="$2"
+  if [ ! -d "${runtime_dir}" ]; then
+    return
+  fi
+  find "${runtime_dir}" \( -perm -111 -o -name '*.dylib' -o -name '*.so' -o -name '*.node' \) -type f | while IFS= read -r binary_path; do
+    validate_binary_architecture "${binary_path}" "${expected_arch}"
+  done
+}
+
+extract_binary_macos_min_version() {
+  binary_path="$1"
+  python3 - "${binary_path}" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+
+def run(cmd):
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except Exception:
+        return ""
+    return result.stdout
+
+for command in (("xcrun", "vtool", "-show-build", str(path)), ("otool", "-l", str(path))):
+    output = run(command)
+    if not output:
+        continue
+    match = re.search(r"\bminos\s+([0-9]+(?:\.[0-9]+){0,2})", output)
+    if match:
+        print(match.group(1))
+        raise SystemExit(0)
+    lines = output.splitlines()
+    for index, line in enumerate(lines):
+        if "LC_VERSION_MIN_MACOSX" not in line:
+            continue
+        for follow in lines[index + 1:index + 5]:
+            version_match = re.search(r"\bversion\s+([0-9]+(?:\.[0-9]+){0,2})", follow)
+            if version_match:
+                print(version_match.group(1))
+                raise SystemExit(0)
+print("")
+PY
+}
+
+version_greater_than() {
+  left_version="$1"
+  right_version="$2"
+  python3 - "${left_version}" "${right_version}" <<'PY'
+import sys
+
+def parse(value: str) -> tuple[int, ...]:
+    parts = [int(part) for part in value.split('.') if part]
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+raise SystemExit(0 if parse(sys.argv[1]) > parse(sys.argv[2]) else 1)
+PY
+}
+
+assert_binary_macos_min_version_not_newer_than() {
+  binary_path="$1"
+  max_version="$2"
+  if [ ! -f "${binary_path}" ]; then
+    return
+  fi
+  file_description="$(file -b "${binary_path}" 2>/dev/null || true)"
+  case "${file_description}" in
+    *Mach-O*)
+      ;;
+    *)
+      return
+      ;;
+  esac
+  min_version="$(extract_binary_macos_min_version "${binary_path}")"
+  if [ -z "${min_version}" ]; then
+    echo "Unable to resolve minimum macOS version for ${binary_path}" >&2
+    exit 1
+  fi
+  if version_greater_than "${min_version}" "${max_version}"; then
+    echo "Bundled binary requires macOS ${min_version}, newer than allowed ${max_version}: ${binary_path}" >&2
+    exit 1
+  fi
+}
+
+validate_runtime_tree_macos_min_version() {
+  runtime_dir="$1"
+  max_version="$2"
+  if [ ! -d "${runtime_dir}" ]; then
+    return
+  fi
+  find "${runtime_dir}" \( -perm -111 -o -name '*.dylib' -o -name '*.so' -o -name '*.node' \) -type f | while IFS= read -r binary_path; do
+    assert_binary_macos_min_version_not_newer_than "${binary_path}" "${max_version}"
+  done
+}
+
+find_first_match() {
+  search_root="$1"
+  expression="$2"
+  find "${search_root}" -path "${expression}" -print -quit 2>/dev/null || true
+}
+
+assert_runtime_file_exists() {
+  file_path="$1"
+  label="$2"
+  if [ ! -e "${file_path}" ]; then
+    echo "Missing required bundled asset (${label}): ${file_path}" >&2
+    exit 1
+  fi
+}
+
+assert_runtime_match_exists() {
+  search_root="$1"
+  expression="$2"
+  label="$3"
+  match_path="$(find_first_match "${search_root}" "${expression}")"
+  if [ -z "${match_path}" ]; then
+    echo "Missing required bundled asset (${label}) under ${search_root}: ${expression}" >&2
+    exit 1
+  fi
+}
+
+copy_staged_runtime() {
+  arch_name="$1"
+  runtime_name="$2"
+  source_dir="${RUNTIME_STAGING_DIR}/${arch_name}/${runtime_name}"
+  target_dir="${RUNTIME_DEST_DIR}/macos/${arch_name}"
+  if [ ! -d "${source_dir}" ]; then
+    return
+  fi
+  mkdir -p "${target_dir}"
+  rsync -a --delete --exclude '.DS_Store' "${source_dir}" "${target_dir}/"
+}
+
+copy_unlock_music_node() {
+  source_dir="$1"
+  target_dir="${RUNTIME_DEST_DIR}/unlock_music_node"
+  rm -rf "${target_dir}"
+  if [ -d "${source_dir}" ]; then
+    rsync -a --delete --exclude '.DS_Store' "${source_dir}" "${RUNTIME_DEST_DIR}/"
+  fi
+}
+
+assert_staged_runtime_complete() {
+  staged_arch_dir="$1"
+  staged_runtime_dir="${staged_arch_dir}/dj_runtime_py"
+  staged_python_framework_dir="${staged_arch_dir}/python/Python.framework"
+  staged_ff_dir="${staged_arch_dir}/ff"
+  assert_runtime_file_exists "${staged_runtime_dir}/dj_runtime_py/__main__.py" "staged dj_runtime_py"
+  assert_runtime_file_exists "${staged_python_framework_dir}/Versions/3.11/bin/python3.11" "staged Python executable"
+  assert_runtime_file_exists "${staged_python_framework_dir}/Versions/3.11/Python" "staged Python dylib"
+  assert_runtime_match_exists "${staged_python_framework_dir}" "*/pyexpat*.so" "staged pyexpat"
+  assert_runtime_file_exists "${staged_ff_dir}/ffmpeg" "staged ffmpeg"
+  assert_runtime_file_exists "${staged_ff_dir}/ffprobe" "staged ffprobe"
+  assert_runtime_match_exists "${staged_runtime_dir}" "*/site-packages/dj_scan_core/dj_scan_core.abi3.so" "staged dj_scan_core"
+  assert_runtime_match_exists "${staged_runtime_dir}" "*/site-packages/dj_transcode_core/dj_transcode_core.abi3.so" "staged dj_transcode_core"
+  assert_runtime_match_exists "${staged_runtime_dir}" "*/site-packages/dj_usb_backup_core/dj_usb_backup_core.abi3.so" "staged dj_usb_backup_core"
+  assert_runtime_match_exists "${staged_runtime_dir}" "*/site-packages/prompt_toolkit-*.dist-info/METADATA" "staged prompt_toolkit metadata"
+  node_candidate="$(find_first_match "${staged_runtime_dir}" "*/site-packages/nodejs_wheel/bin/node")"
+  if [ -z "${node_candidate}" ]; then
+    node_candidate="$(find_first_match "${staged_runtime_dir}" "*/.venv/bin/node")"
+  fi
+  if [ -z "${node_candidate}" ]; then
+    echo "Missing required bundled asset (staged node executable) under ${staged_runtime_dir}" >&2
+    exit 1
+  fi
+}
+
+mkdir -p "${RUNTIME_DEST_DIR}"
+mkdir -p "${MACOS_DIR}" "${FRAMEWORKS_DIR}" "${RESOURCES_DIR}"
+
+STAGED_RUNTIME_FOUND=0
+STAGED_ARCH_DIR="${RUNTIME_STAGING_DIR}/${TARGET_RUNTIME_ARCH}"
+STAGED_PYTHON_FRAMEWORK_SOURCE="${STAGED_ARCH_DIR}/python/Python.framework"
+STAGED_UNLOCK_WORKER_SOURCE="${STAGED_ARCH_DIR}/unlock_music_node"
+STAGED_FF_SOURCE_DIR="${STAGED_ARCH_DIR}/ff"
+WORKSPACE_UNLOCK_WORKER_SOURCE="${RUNTIME_SOURCE_DIR}/unlock_music_node"
+if [ -d "${RUNTIME_DEST_DIR}/macos" ]; then
+  rm -rf "${RUNTIME_DEST_DIR}/macos"
+fi
+if [ -d "${STAGED_ARCH_DIR}/dj_runtime_py" ]; then
+  STAGED_RUNTIME_FOUND=1
+  RUNTIME_SUMMARY_MODE="staged:${TARGET_RUNTIME_ARCH}"
+  assert_staged_runtime_complete "${STAGED_ARCH_DIR}"
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py" "${RUNTIME_DEST_DIR}/unlock_music_node" "${RUNTIME_DEST_DIR}/python"
+  copy_staged_runtime "${TARGET_RUNTIME_ARCH}" "dj_runtime_py"
+  if [ -d "${STAGED_ARCH_DIR}/auth_guest_runtime" ]; then
+    copy_staged_runtime "${TARGET_RUNTIME_ARCH}" "auth_guest_runtime"
+    RUNTIME_SUMMARY_AUTH_MODE="separate"
+  fi
+  mkdir -p "${RUNTIME_DEST_DIR}/python"
+  rsync -a --delete --exclude '.DS_Store' "${STAGED_PYTHON_FRAMEWORK_SOURCE}/" "${RUNTIME_DEST_DIR}/python/Python.framework/"
+  PY_FW_LIB="${RUNTIME_DEST_DIR}/python/Python.framework/Versions/3.11/lib/python3.11"
+  PY_FW_SITE_PACKAGES_LINK="${PY_FW_LIB}/site-packages"
+  rm -rf "${PY_FW_SITE_PACKAGES_LINK}"
+  ln -sfn "../../../../../../macos/${TARGET_RUNTIME_ARCH}/dj_runtime_py/.venv/lib/python3.11/site-packages" "${PY_FW_SITE_PACKAGES_LINK}"
+  if [ ! -d "${PY_FW_SITE_PACKAGES_LINK}" ]; then
+    echo "Broken staged Python site-packages link: ${PY_FW_SITE_PACKAGES_LINK}" >&2
+    exit 1
+  fi
+  if [ -d "${STAGED_UNLOCK_WORKER_SOURCE}" ]; then
+    copy_unlock_music_node "${STAGED_UNLOCK_WORKER_SOURCE}"
+  else
+    copy_unlock_music_node "${WORKSPACE_UNLOCK_WORKER_SOURCE}"
+  fi
+  validate_runtime_tree_architecture "${RUNTIME_DEST_DIR}/macos/${TARGET_RUNTIME_ARCH}" "${TARGET_RUNTIME_ARCH}"
+  validate_runtime_tree_architecture "${RUNTIME_DEST_DIR}/python/Python.framework" "${TARGET_RUNTIME_ARCH}"
+  validate_runtime_tree_architecture "${STAGED_FF_SOURCE_DIR}" "${TARGET_RUNTIME_ARCH}"
+  validate_runtime_tree_macos_min_version "${RUNTIME_DEST_DIR}/macos/${TARGET_RUNTIME_ARCH}" "${TARGET_MACOS_MIN_VERSION}"
+  validate_runtime_tree_macos_min_version "${RUNTIME_DEST_DIR}/python/Python.framework" "${TARGET_MACOS_MIN_VERSION}"
+  validate_runtime_tree_macos_min_version "${STAGED_FF_SOURCE_DIR}" "${TARGET_MACOS_MIN_VERSION}"
+fi
+
+if [ "${STAGED_RUNTIME_FOUND}" -eq 0 ]; then
+  if [ "${REQUIRE_STAGED_RUNTIME}" -eq 1 ] || [ "${ALLOW_WORKSPACE_RUNTIME_FALLBACK}" != "1" ]; then
+    echo "Release packaging requires runtime_staging/macos/${TARGET_RUNTIME_ARCH}. Refusing to bundle workspace Python.framework or workspace .venv into a distributable app." >&2
+    exit 1
+  fi
+  RUNTIME_SUMMARY_MODE="workspace-fallback"
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py" "${RUNTIME_DEST_DIR}/unlock_music_node" "${RUNTIME_DEST_DIR}/python"
+  rsync -a --delete --exclude '.pytest_cache' --exclude '__pycache__' --exclude '.DS_Store' "${RUNTIME_SOURCE_DIR}/dj_runtime_py" "${RUNTIME_DEST_DIR}/"
+  copy_unlock_music_node "${WORKSPACE_UNLOCK_WORKER_SOURCE}"
+  rm -f "${RUNTIME_DEST_DIR}/dj_runtime_py"/test_*.py
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/dj_runtime_py.egg-info"
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/share/man"
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/pip "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/pip-*.dist-info
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/_pytest "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/pytest-*.dist-info
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/av "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/av-*.dist-info
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/nodejs_wheel/include "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python"*/site-packages/nodejs_wheel/share
+  rm -f "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/pip" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/pip3" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/pip3.11" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/py.test" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/pytest"
+fi
+
+WORKSPACE_VENV="${PROJECT_DIR}/../../../.venv"
+WORKSPACE_PYTHON="${WORKSPACE_VENV}/bin/python"
+WORKSPACE_SITE_PACKAGES=""
+for candidate in "${WORKSPACE_VENV}"/lib/python*/site-packages; do
+  if [ -d "${candidate}" ]; then
+    WORKSPACE_SITE_PACKAGES="${candidate}"
+    break
+  fi
+done
+RUNTIME_SITE_PACKAGES=""
+if [ "${STAGED_RUNTIME_FOUND}" -eq 0 ]; then
+  for candidate in "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv"/lib/python*/site-packages; do
+    if [ -d "${candidate}" ]; then
+      RUNTIME_SITE_PACKAGES="${candidate}"
+      break
+    fi
+  done
+fi
+if [ "${STAGED_RUNTIME_FOUND}" -eq 0 ]; then
+  if [ ! -x "${WORKSPACE_PYTHON}" ]; then
+    echo "Workspace Python not found: ${WORKSPACE_PYTHON}" >&2
+    exit 1
+  fi
+  if [ -z "${WORKSPACE_SITE_PACKAGES}" ] || [ -z "${RUNTIME_SITE_PACKAGES}" ]; then
+    echo "Unable to resolve site-packages for runtime bundling" >&2
+    exit 1
+  fi
+  for package in dj_transcode_core dj_scan_core dj_usb_backup_core pypinyin; do
+    if [ ! -e "${WORKSPACE_SITE_PACKAGES}/${package}" ]; then
+      echo "Required package missing from workspace venv: ${package}" >&2
+      exit 1
+    fi
+    rsync -a --delete "${WORKSPACE_SITE_PACKAGES}/${package}" "${RUNTIME_SITE_PACKAGES}/"
+  done
+fi
+if [ "${STAGED_RUNTIME_FOUND}" -eq 0 ]; then
+  if [ -n "${RUNTIME_SITE_PACKAGES}" ]; then
+    find "${RUNTIME_SITE_PACKAGES}" -type d -name '*.dSYM' -prune -exec rm -rf {} +
+  fi
+  for candidate in "${RUNTIME_SITE_PACKAGES}"/__editable__*.pth "${RUNTIME_SITE_PACKAGES}"/*.dist-info/direct_url.json; do
+    if [ -e "${candidate}" ]; then
+      rm -f "${candidate}"
+    fi
+  done
+  rm -f "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/pyvenv.cfg"
+  rm -f "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/python" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/python3" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/bin/python3.11"
+  PY_STDLIB_DIR="${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python3.11"
+  if [ -d "${PY_STDLIB_DIR}" ]; then
+    rm -rf "${PY_STDLIB_DIR}/test" "${PY_STDLIB_DIR}/idlelib" "${PY_STDLIB_DIR}/tkinter" "${PY_STDLIB_DIR}/ensurepip" "${PY_STDLIB_DIR}/pydoc_data" "${PY_STDLIB_DIR}/distutils" "${PY_STDLIB_DIR}/unittest" "${PY_STDLIB_DIR}/__pycache__"
+    find "${PY_STDLIB_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  fi
+  rm -rf "${RUNTIME_SITE_PACKAGES}"/setuptools "${RUNTIME_SITE_PACKAGES}"/setuptools-*.dist-info
+  rm -rf "${RUNTIME_SITE_PACKAGES}"/Cryptodome/SelfTest "${RUNTIME_SITE_PACKAGES}"/Crypto/SelfTest
+  find "${RUNTIME_SITE_PACKAGES}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  rm -f "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python3.11/site-packages/nodejs_wheel/bin/corepack" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python3.11/site-packages/nodejs_wheel/bin/npm" "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python3.11/site-packages/nodejs_wheel/bin/npx"
+  rm -rf "${RUNTIME_DEST_DIR}/dj_runtime_py/.venv/lib/python3.11/site-packages/nodejs_wheel/lib"
+  for abi3_so in "${RUNTIME_SITE_PACKAGES}"/dj_*/dj_*.abi3.so; do
+    if [ -f "${abi3_so}" ]; then
+      SO_BASENAME="$(basename "${abi3_so}")"
+      install_name_tool -id "@loader_path/${SO_BASENAME}" "${abi3_so}"
+      otool -L "${abi3_so}" | while IFS= read -r dep_line; do
+        DEP_PATTERN="$(printf '%s' "${dep_line}" | sed 's/^[[:space:]]*//' | cut -d' ' -f1)"
+        case "${DEP_PATTERN}" in
+          /Users/*|/opt/homebrew/*|/usr/local/*|*/target/*)
+            DEP_BASENAME="$(basename "${DEP_PATTERN}")"
+            if [ "${DEP_BASENAME}" != "${SO_BASENAME}" ]; then
+              install_name_tool -change "${DEP_PATTERN}" "@loader_path/${DEP_BASENAME}" "${abi3_so}"
+            fi
+            ;;
+        esac
+      done
+      strip -x "${abi3_so}"
+    fi
+  done
+  PYTHON_FRAMEWORK_SOURCE="$(${WORKSPACE_PYTHON} - <<'PY'
+import sysconfig
+print(f"{sysconfig.get_config_var('PYTHONFRAMEWORKPREFIX')}/{sysconfig.get_config_var('PYTHONFRAMEWORKDIR')}")
+PY
+)"
+  PYTHON_FRAMEWORK_DEST="${RUNTIME_DEST_DIR}/python/Python.framework"
+  rm -rf "${PYTHON_FRAMEWORK_DEST}"
+  mkdir -p "${RUNTIME_DEST_DIR}/python"
+  rsync -a --delete --exclude 'Headers' --exclude 'share' "${PYTHON_FRAMEWORK_SOURCE}/" "${PYTHON_FRAMEWORK_DEST}/"
+  PY_FW_LIB="${PYTHON_FRAMEWORK_DEST}/Versions/3.11/lib/python3.11"
+  rm -rf "${PY_FW_LIB}/test" "${PY_FW_LIB}/idlelib" "${PY_FW_LIB}/tkinter" "${PY_FW_LIB}/ensurepip" "${PY_FW_LIB}/pydoc_data" "${PY_FW_LIB}/distutils" "${PY_FW_LIB}/unittest"
+  rm -rf "${PYTHON_FRAMEWORK_DEST}/Versions/3.11/include"
+  find "${PY_FW_LIB}" -type d -name '__pycache__' -prune -exec rm -rf {} +
+  PY_FW_SITE_PACKAGES_LINK="${PY_FW_LIB}/site-packages"
+  rm -rf "${PY_FW_SITE_PACKAGES_LINK}"
+  ln -sfn "../../../../../../dj_runtime_py/.venv/lib/python3.11/site-packages" "${PY_FW_SITE_PACKAGES_LINK}"
+  ln -sfn 3.11 "${PYTHON_FRAMEWORK_DEST}/Versions/Current"
+  PYTHON_DYLIB_DEST="${PYTHON_FRAMEWORK_DEST}/Versions/3.11/Python"
+  PYTHON_BIN_DEST="${PYTHON_FRAMEWORK_DEST}/Versions/3.11/bin/python3.11"
+  PYTHON_APP_DIR_DEST="${PYTHON_FRAMEWORK_DEST}/Versions/3.11/Resources/Python_app"
+  PYTHON_APP_BIN_DEST="${PYTHON_APP_DIR_DEST}/Contents/MacOS/Python"
+  install_name_tool -id "@loader_path/Python" "${PYTHON_DYLIB_DEST}"
+  PYTHON_DYLIB_SOURCE="$(otool -L "${PYTHON_BIN_DEST}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if value.endswith("/Python") and "Python.framework" in value:
+        print(value)
+        break')"
+  if [ -z "${PYTHON_DYLIB_SOURCE}" ]; then
+    echo "Unable to resolve Python dylib source for runtime bundling" >&2
+    exit 1
+  fi
+  mv "${PYTHON_FRAMEWORK_DEST}/Versions/3.11/Resources/Python.app" "${PYTHON_APP_DIR_DEST}"
+  python3 - "${PYTHON_BIN_DEST}" <<'PY'
+from pathlib import Path
+import sys
+binary_path = Path(sys.argv[1])
+data = binary_path.read_bytes()
+old = b'Resources/Python.app/Contents/MacOS/Python\x00'
+new = b'Resources/Python_app/Contents/MacOS/Python\x00'
+if old not in data:
+    raise SystemExit('python3.11 stub path not found for patching')
+binary_path.write_bytes(data.replace(old, new))
+PY
+  install_name_tool -change "${PYTHON_DYLIB_SOURCE}" "@executable_path/../Python" "${PYTHON_BIN_DEST}"
+  install_name_tool -change "${PYTHON_DYLIB_SOURCE}" "@executable_path/../../../../Python" "${PYTHON_APP_BIN_DEST}"
+  PY_LIB_DYNLOAD_DIR="${PYTHON_FRAMEWORK_DEST}/Versions/3.11/lib/python3.11/lib-dynload"
+  SSL_MODULE=""
+  HASHLIB_MODULE=""
+  for candidate in "${PY_LIB_DYNLOAD_DIR}"/_ssl*.so; do
+    if [ -f "${candidate}" ]; then
+      SSL_MODULE="${candidate}"
+      break
+    fi
+  done
+  for candidate in "${PY_LIB_DYNLOAD_DIR}"/_hashlib*.so; do
+    if [ -f "${candidate}" ]; then
+      HASHLIB_MODULE="${candidate}"
+      break
+    fi
+  done
+  OPENSSL_LIBSSL_SOURCE=""
+  OPENSSL_LIBCRYPTO_SOURCE=""
+  if [ -n "${SSL_MODULE}" ]; then
+    OPENSSL_LIBSSL_SOURCE="$(otool -L "${SSL_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libssl." in value:
+        print(value)
+        break')"
+    OPENSSL_LIBCRYPTO_SOURCE="$(otool -L "${SSL_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libcrypto." in value:
+        print(value)
+        break')"
+  fi
+  if [ -z "${OPENSSL_LIBCRYPTO_SOURCE}" ] && [ -n "${HASHLIB_MODULE}" ]; then
+    OPENSSL_LIBCRYPTO_SOURCE="$(otool -L "${HASHLIB_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libcrypto." in value:
+        print(value)
+        break')"
+  fi
+  if [ -z "${SSL_MODULE}" ]; then
+    echo "Python _ssl module not found in bundled framework" >&2
+    exit 1
+  fi
+  if [ -z "${OPENSSL_LIBSSL_SOURCE}" ] || [ -z "${OPENSSL_LIBCRYPTO_SOURCE}" ]; then
+    echo "Unable to resolve OpenSSL dylib source for Python runtime" >&2
+    exit 1
+  fi
+  cp -f "${OPENSSL_LIBSSL_SOURCE}" "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib"
+  cp -f "${OPENSSL_LIBCRYPTO_SOURCE}" "${PY_LIB_DYNLOAD_DIR}/libcrypto.3.dylib"
+  chmod 755 "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib" "${PY_LIB_DYNLOAD_DIR}/libcrypto.3.dylib"
+  install_name_tool -id "@loader_path/libssl.3.dylib" "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib"
+  install_name_tool -id "@loader_path/libcrypto.3.dylib" "${PY_LIB_DYNLOAD_DIR}/libcrypto.3.dylib"
+  install_name_tool -change "${OPENSSL_LIBSSL_SOURCE}" "@loader_path/libssl.3.dylib" "${SSL_MODULE}"
+  install_name_tool -change "${OPENSSL_LIBCRYPTO_SOURCE}" "@loader_path/libcrypto.3.dylib" "${SSL_MODULE}"
+  if [ -n "${HASHLIB_MODULE}" ]; then
+    install_name_tool -change "${OPENSSL_LIBCRYPTO_SOURCE}" "@loader_path/libcrypto.3.dylib" "${HASHLIB_MODULE}"
+  fi
+  install_name_tool -change "${OPENSSL_LIBCRYPTO_SOURCE}" "@loader_path/libcrypto.3.dylib" "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib"
+  LIBSSL_LIBCRYPTO_REF="$(otool -L "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libcrypto" in value and value.startswith("/"):
+        print(value)
+        break' || true)"
+  if [ -n "${LIBSSL_LIBCRYPTO_REF}" ] && [ "${LIBSSL_LIBCRYPTO_REF}" != "@loader_path/libcrypto.3.dylib" ]; then
+    install_name_tool -change "${LIBSSL_LIBCRYPTO_REF}" "@loader_path/libcrypto.3.dylib" "${PY_LIB_DYNLOAD_DIR}/libssl.3.dylib"
+  fi
+  SQLITE3_MODULE=""
+  for candidate in "${PY_LIB_DYNLOAD_DIR}"/_sqlite3*.so; do
+    if [ -f "${candidate}" ]; then
+      SQLITE3_MODULE="${candidate}"
+      break
+    fi
+  done
+  if [ -n "${SQLITE3_MODULE}" ]; then
+    SQLITE3_DYLIB_SOURCE="$(otool -L "${SQLITE3_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libsqlite3" in value:
+        print(value)
+        break')"
+    if [ -n "${SQLITE3_DYLIB_SOURCE}" ]; then
+      cp -fL "${SQLITE3_DYLIB_SOURCE}" "${PY_LIB_DYNLOAD_DIR}/libsqlite3.dylib"
+      chmod 755 "${PY_LIB_DYNLOAD_DIR}/libsqlite3.dylib"
+      install_name_tool -id "@loader_path/libsqlite3.dylib" "${PY_LIB_DYNLOAD_DIR}/libsqlite3.dylib"
+      install_name_tool -change "${SQLITE3_DYLIB_SOURCE}" "@loader_path/libsqlite3.dylib" "${SQLITE3_MODULE}"
+    fi
+  fi
+  LZMA_MODULE=""
+  for candidate in "${PY_LIB_DYNLOAD_DIR}"/_lzma*.so; do
+    if [ -f "${candidate}" ]; then
+      LZMA_MODULE="${candidate}"
+      break
+    fi
+  done
+  if [ -n "${LZMA_MODULE}" ]; then
+    LZMA_DYLIB_SOURCE="$(otool -L "${LZMA_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "liblzma" in value:
+        print(value)
+        break')"
+    if [ -n "${LZMA_DYLIB_SOURCE}" ]; then
+      cp -fL "${LZMA_DYLIB_SOURCE}" "${PY_LIB_DYNLOAD_DIR}/liblzma.5.dylib"
+      chmod 755 "${PY_LIB_DYNLOAD_DIR}/liblzma.5.dylib"
+      install_name_tool -id "@loader_path/liblzma.5.dylib" "${PY_LIB_DYNLOAD_DIR}/liblzma.5.dylib"
+      install_name_tool -change "${LZMA_DYLIB_SOURCE}" "@loader_path/liblzma.5.dylib" "${LZMA_MODULE}"
+    fi
+  fi
+  DECIMAL_MODULE=""
+  for candidate in "${PY_LIB_DYNLOAD_DIR}"/_decimal*.so; do
+    if [ -f "${candidate}" ]; then
+      DECIMAL_MODULE="${candidate}"
+      break
+    fi
+  done
+  if [ -n "${DECIMAL_MODULE}" ]; then
+    MPDEC_DYLIB_SOURCE="$(otool -L "${DECIMAL_MODULE}" | python3 -c 'import sys
+for line in sys.stdin:
+    value = line.strip().split(" ", 1)[0]
+    if "libmpdec" in value:
+        print(value)
+        break')"
+    if [ -n "${MPDEC_DYLIB_SOURCE}" ]; then
+      cp -fL "${MPDEC_DYLIB_SOURCE}" "${PY_LIB_DYNLOAD_DIR}/libmpdec.4.dylib"
+      chmod 755 "${PY_LIB_DYNLOAD_DIR}/libmpdec.4.dylib"
+      install_name_tool -id "@loader_path/libmpdec.4.dylib" "${PY_LIB_DYNLOAD_DIR}/libmpdec.4.dylib"
+      install_name_tool -change "${MPDEC_DYLIB_SOURCE}" "@loader_path/libmpdec.4.dylib" "${DECIMAL_MODULE}"
+    fi
+  fi
+fi
+
+FF_SOURCE_DIR="${PROJECT_DIR}/../../../ff"
+FF_DEST_DIR="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ff"
+if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ] && [ -d "${STAGED_FF_SOURCE_DIR}" ]; then
+  FF_SOURCE_DIR="${STAGED_FF_SOURCE_DIR}"
+fi
+mkdir -p "${FF_DEST_DIR}"
+cp "${FF_SOURCE_DIR}/ffmpeg" "${FF_DEST_DIR}/ffmpeg"
+cp "${FF_SOURCE_DIR}/ffprobe" "${FF_DEST_DIR}/ffprobe"
+chmod 755 "${FF_DEST_DIR}/ffmpeg" "${FF_DEST_DIR}/ffprobe"
+for ff_support_lib in "${FF_SOURCE_DIR}"/*.dylib; do
+  if [ ! -f "${ff_support_lib}" ]; then
+    continue
+  fi
+  ff_support_lib_name="$(basename "${ff_support_lib}")"
+  cp "${ff_support_lib}" "${FF_DEST_DIR}/${ff_support_lib_name}"
+  chmod 755 "${FF_DEST_DIR}/${ff_support_lib_name}"
+done
+if [ "${STAGED_RUNTIME_FOUND}" -eq 0 ]; then
+  chmod 755 "${PYTHON_BIN_DEST}" "${PYTHON_DYLIB_DEST}" "${PYTHON_APP_BIN_DEST}"
+fi
+
+assert_runtime_file_exists "${FF_DEST_DIR}/ffmpeg" "ffmpeg"
+assert_runtime_file_exists "${FF_DEST_DIR}/ffprobe" "ffprobe"
+if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ]; then
+  assert_runtime_file_exists "${FF_DEST_DIR}/libz.1.dylib" "ffmpeg zlib dependency"
+fi
+assert_runtime_match_exists "${RUNTIME_DEST_DIR}" "*/site-packages/prompt_toolkit-*.dist-info/METADATA" "bundled prompt_toolkit metadata"
+if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ]; then
+  validate_binary_architecture "${FF_DEST_DIR}/ffmpeg" "${TARGET_RUNTIME_ARCH}"
+  validate_binary_architecture "${FF_DEST_DIR}/ffprobe" "${TARGET_RUNTIME_ARCH}"
+else
+  validate_binary_architecture "${FF_DEST_DIR}/ffmpeg" "arm64 x86_64"
+  validate_binary_architecture "${FF_DEST_DIR}/ffprobe" "arm64 x86_64"
+fi
+for ff_support_lib in "${FF_DEST_DIR}"/*.dylib; do
+  if [ ! -f "${ff_support_lib}" ]; then
+    continue
+  fi
+  if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ]; then
+    validate_binary_architecture "${ff_support_lib}" "${TARGET_RUNTIME_ARCH}"
+  else
+    validate_binary_architecture "${ff_support_lib}" "arm64 x86_64"
+  fi
+done
+assert_no_external_deps "${FF_DEST_DIR}/ffmpeg"
+assert_no_external_deps "${FF_DEST_DIR}/ffprobe"
+for ff_support_lib in "${FF_DEST_DIR}"/*.dylib; do
+  if [ ! -f "${ff_support_lib}" ]; then
+    continue
+  fi
+  assert_no_external_deps "${ff_support_lib}"
+done
+if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ]; then
+  assert_runtime_file_exists "${RUNTIME_DEST_DIR}/python/Python.framework/Versions/3.11/bin/python3.11" "staged bundled Python executable"
+  assert_runtime_match_exists "${RUNTIME_DEST_DIR}/python/Python.framework" "*/pyexpat*.so" "bundled staged pyexpat"
+  validate_runtime_tree_macos_min_version "${FF_DEST_DIR}" "${TARGET_MACOS_MIN_VERSION}"
+  sign_macho_tree "${RUNTIME_DEST_DIR}/macos"
+  sign_macho_tree "${RUNTIME_DEST_DIR}/python/Python.framework"
+  sign_macho_tree "${RUNTIME_DEST_DIR}/unlock_music_node"
+else
+  assert_no_external_deps "${PYTHON_BIN_DEST}"
+  assert_no_external_deps "${PYTHON_DYLIB_DEST}"
+  assert_no_external_deps "${PYTHON_APP_BIN_DEST}"
+  sign_macho_tree "${PYTHON_FRAMEWORK_DEST}"
+  sign_macho_tree "${RUNTIME_DEST_DIR}/unlock_music_node"
+  sign_macho_tree "${RUNTIME_DEST_DIR}/dj_runtime_py"
+fi
+sign_macho_tree "${FF_DEST_DIR}"
+
+if [ "${STAGED_RUNTIME_FOUND}" -eq 1 ]; then
+  thin_macho_tree_to_architecture "${APP_BUNDLE_PATH}" "${TARGET_RUNTIME_ARCH}"
+  validate_macho_tree_architecture "${APP_BUNDLE_PATH}" "${TARGET_RUNTIME_ARCH}"
+fi
+
+find "${APP_BUNDLE_PATH}" -exec xattr -c {} \; 2>/dev/null || true
+xattr -rc "${APP_BUNDLE_PATH}" 2>/dev/null || true
+if [ "${HAS_PUBLISH_SIGNATURE}" -eq 1 ]; then
+  codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --options runtime --entitlements "${CODE_SIGN_ENTITLEMENTS}" --timestamp "${APP_BUNDLE_PATH}"
+else
+  codesign --force --deep --sign - "${APP_BUNDLE_PATH}"
+fi
+
+echo "Bundled runtime summary: arch=${TARGET_RUNTIME_ARCH} mode=${RUNTIME_SUMMARY_MODE} auth=${RUNTIME_SUMMARY_AUTH_MODE} min_macos=${TARGET_MACOS_MIN_VERSION} fallback=$([ "${ALLOW_WORKSPACE_RUNTIME_FALLBACK}" = "1" ] && printf 'allowed' || printf 'disabled') signing=$([ "${HAS_PUBLISH_SIGNATURE}" -eq 1 ] && printf 'publish' || printf 'ad-hoc') ff=embedded"
