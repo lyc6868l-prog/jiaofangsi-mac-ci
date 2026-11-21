@@ -9,6 +9,7 @@ case "${ARCH}" in
   *) echo "Unsupported DJ_RELEASE_ARCH: ${ARCH}" >&2; exit 2 ;;
 esac
 OUTPUT_ROOT="${DJ_RELEASE_INPUTS_ROOT:-${REPO_ROOT}/runtime_staging_sources/macos/${ARCH}}"
+if [ "${ARCH}" = "arm64" ]; then CARGO_ARCH=aarch64; else CARGO_ARCH=x86_64; fi
 BUILD_ROOT="${DJ_RELEASE_BUILD_ROOT:-${REPO_ROOT}/runtime_staging_sources/.build-${ARCH}}"
 TARGET_MACOS_MIN_VERSION="${DJ_RUNTIME_TARGET_MACOS_MIN_VERSION:-10.15}"
 PYTHON_VERSION="${DJ_RELEASE_PYTHON_VERSION:-3.11.15}"
@@ -453,7 +454,7 @@ PY
   export REQUESTS_CA_BUNDLE="${certifi_bundle}"
   export CURL_CA_BUNDLE="${certifi_bundle}"
   export PIP_CERT="${certifi_bundle}"
-  CARGO_BUILD_TARGET="${ARCH}-apple-darwin" \
+  CARGO_BUILD_TARGET="${CARGO_ARCH}-apple-darwin" \
   PYO3_PYTHON="${vpy}" \
   MACOSX_DEPLOYMENT_TARGET="${TARGET_MACOS_MIN_VERSION}" \
   CFLAGS="${MACOS_CFLAGS}" \
@@ -461,7 +462,7 @@ PY
   LDFLAGS="${MACOS_LDFLAGS}" \
   "${vpy}" -m pip install --no-binary=cryptography,orjson,lxml,brotli,PyYAML,curl-cffi \
     "${REPO_ROOT}/runtime/dj_runtime_py"
-  CARGO_BUILD_TARGET="${ARCH}-apple-darwin" \
+  CARGO_BUILD_TARGET="${CARGO_ARCH}-apple-darwin" \
   VIRTUAL_ENV="${VENV_DIR}" \
   PATH="${VENV_DIR}/bin:${PATH}" \
   PYO3_PYTHON="${vpy}" \
@@ -470,7 +471,7 @@ PY
   CXXFLAGS="${MACOS_CXXFLAGS}" \
   LDFLAGS="${MACOS_LDFLAGS}" \
   "${vpy}" -m maturin develop --pip-path "${VENV_DIR}/bin/pip" -m "${REPO_ROOT}/crates/dj_scan_core/Cargo.toml" --features python-extension
-  CARGO_BUILD_TARGET="${ARCH}-apple-darwin" \
+  CARGO_BUILD_TARGET="${CARGO_ARCH}-apple-darwin" \
   VIRTUAL_ENV="${VENV_DIR}" \
   PATH="${VENV_DIR}/bin:${PATH}" \
   PYO3_PYTHON="${vpy}" \
@@ -479,7 +480,7 @@ PY
   CXXFLAGS="${MACOS_CXXFLAGS}" \
   LDFLAGS="${MACOS_LDFLAGS}" \
   "${vpy}" -m maturin develop --pip-path "${VENV_DIR}/bin/pip" -m "${REPO_ROOT}/crates/dj_transcode_core/Cargo.toml" --features python-extension
-  CARGO_BUILD_TARGET="${ARCH}-apple-darwin" \
+  CARGO_BUILD_TARGET="${CARGO_ARCH}-apple-darwin" \
   VIRTUAL_ENV="${VENV_DIR}" \
   PATH="${VENV_DIR}/bin:${PATH}" \
   PYO3_PYTHON="${vpy}" \
